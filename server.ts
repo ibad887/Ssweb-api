@@ -37,10 +37,39 @@ async function startServer() {
       
       // Navigate to the target URL
       await page.goto(url as string, { waitUntil: "networkidle2", timeout: 30000 });
+      
+      const isFullPage = fullPage === "true";
+
+      if (isFullPage) {
+        // Scroll down to the bottom of the page to trigger lazy-loading
+        await page.evaluate(async () => {
+          await new Promise<void>((resolve) => {
+            let totalHeight = 0;
+            const distance = 200;
+            const timer = setInterval(() => {
+              const scrollHeight = document.documentElement.scrollHeight;
+              window.scrollBy(0, distance);
+              totalHeight += distance;
+
+              if (totalHeight >= scrollHeight) {
+                clearInterval(timer);
+                resolve();
+              }
+            }, 100);
+          });
+        });
+
+        // Wait a bit for images to load, then scroll back to top
+        await new Promise(r => setTimeout(r, 1000));
+        await page.evaluate(() => window.scrollTo(0, 0));
+      } else {
+        // For non-fullpage, just wait a little bit
+        await new Promise(r => setTimeout(r, 1000));
+      }
 
       // Take screenshot
       const screenshot = await page.screenshot({
-        fullPage: fullPage === "true",
+        fullPage: isFullPage,
         type: (type as any) === "jpeg" ? "jpeg" : "png",
       });
 
