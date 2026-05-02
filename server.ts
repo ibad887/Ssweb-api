@@ -17,7 +17,7 @@ async function startServer() {
 
   // API Route for Screenshot
   app.get("/api/ssweb", async (req, res) => {
-    const { url, fullPage, type } = req.query;
+    const { url, fullPage, full, type } = req.query;
 
     if (!url) {
       return res.status(400).json({ status: false, message: "URL is required, you fool!" });
@@ -38,7 +38,9 @@ async function startServer() {
       // Navigate to the target URL
       await page.goto(url as string, { waitUntil: "networkidle2", timeout: 30000 });
       
-      const isFullPage = fullPage === "true";
+      const isFullPage = fullPage === "true" || full === "true";
+      
+      console.log(`[NOXA_TERMINAL] OPTIONS: fullPage=${isFullPage}, type=${type}`);
 
       if (isFullPage) {
         // Scroll down to the bottom of the page to trigger lazy-loading
