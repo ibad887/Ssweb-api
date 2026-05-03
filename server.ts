@@ -4,9 +4,13 @@ import path from "path";
 import cors from "cors";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import multer from "multer";
+import { removeBackground } from "@imgly/background-removal-node";
 
 // @ts-ignore
 puppeteer.use(StealthPlugin());
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 async function startServer() {
   const app = express();
@@ -86,6 +90,83 @@ async function startServer() {
       if (browser) await browser.close();
       console.error(`[NOXA_TERMINAL] FAILURE: System failed to snatch ${url}. Error: ${error.message}`);
       res.status(500).json({ status: false, message: "Failed to penetrate the target URL.", error: error.message });
+    }
+  });
+
+  // API Route for Remove Background
+  app.post("/api/removebg", upload.single("image"), async (req, res) => {
+    const { url } = req.body;
+    const file = req.file;
+
+    if (!url && !file) {
+      return res.status(400).json({ status: false, message: "Provide an image file or a URL!" });
+    }
+
+    console.log(`[NOXA_TERMINAL] EXECUTION: Removing background...`);
+
+    try {
+      let imageBlob: Blob;
+      if (file) {
+        imageBlob = new Blob([file.buffer], { type: file.mimetype || 'image/jpeg' });
+      } else if (url) {
+        const response = await fetch(url as string);
+        if (!response.ok) {
+          return res.status(400).json({ status: false, message: "Failed to fetch image from the provided URL." });
+        }
+        const contentType = response.headers.get("content-type");
+        if (contentType && !contentType.startsWith("image/")) {
+          return res.status(400).json({ status: false, message: `URL provided is not an image (Content-Type: ${contentType}). Please provide a direct link to an image file.` });
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        imageBlob = new Blob([arrayBuffer], { type: contentType || 'image/jpeg' });
+      } else {
+        return res.status(400).json({ status: false, message: "Provide an image file or a URL!" });
+      }
+
+      const resultBlob = await removeBackground(imageBlob);
+      const arrayBuffer = await resultBlob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      res.set("Content-Type", "image/png");
+      res.send(buffer);
+      console.log(`[NOXA_TERMINAL] SUCCESS: Background obliterated.`);
+    } catch (error: any) {
+      console.error(`[NOXA_TERMINAL] FAILURE: Background removal failed. Error: ${error.message}`);
+      res.status(500).json({ status: false, message: "Failed to remove background.", error: error.message });
+    }
+  });
+
+  app.get("/api/removebg", async (req, res) => {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).json({ status: false, message: "URL is required, you fool!" });
+    }
+
+    console.log(`[NOXA_TERMINAL] EXECUTION: Removing background from ${url}...`);
+
+    try {
+      const response = await fetch(url as string);
+      if (!response.ok) {
+        return res.status(400).json({ status: false, message: "Failed to fetch image from the provided URL." });
+      }
+      const contentType = response.headers.get("content-type");
+      if (contentType && !contentType.startsWith("image/")) {
+        return res.status(400).json({ status: false, message: `URL provided is not an image (Content-Type: ${contentType}). Please provide a direct link to an image file.` });
+      }
+      const imageArrayBuffer = await response.arrayBuffer();
+      const imageBlob = new Blob([imageArrayBuffer], { type: contentType || 'image/jpeg' });
+
+      const resultBlob = await removeBackground(imageBlob);
+      const resultArrayBuffer = await resultBlob.arrayBuffer();
+      const buffer = Buffer.from(resultArrayBuffer);
+
+      res.set("Content-Type", "image/png");
+      res.send(buffer);
+      console.log(`[NOXA_TERMINAL] SUCCESS: Background obliterated for ${url}.`);
+    } catch (error: any) {
+      console.error(`[NOXA_TERMINAL] FAILURE: Background removal failed for ${url}. Error: ${error.message}`);
+      res.status(500).json({ status: false, message: "Failed to remove background.", error: error.message });
     }
   });
 

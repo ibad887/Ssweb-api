@@ -3,20 +3,22 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   Camera, 
   Layers,
-  ChevronRight,
   ExternalLink,
   Code2,
   Scan,
   MonitorSmartphone,
-  CheckCircle2
+  CheckCircle2,
+  Wand2
 } from "lucide-react";
 
 export default function App() {
   const [url, setUrl] = useState("https://github.com/cakrayp/ssweb-api-caliph");
+  const [feature, setFeature] = useState("ssweb");
   const [fullPage, setFullPage] = useState(false);
   const [format, setFormat] = useState("png");
   const [loading, setLoading] = useState(false);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [directApiUrl, setDirectApiUrl] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>(["[SYSTEM] API interface ready to capture."]);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -29,6 +31,8 @@ export default function App() {
     setLogs(prev => [...prev, `[${time}] ${msg}`]);
   };
 
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+
   const handleCapture = async () => {
     if (!url) {
       addLog("ERROR: Target URL is missing.");
@@ -37,21 +41,32 @@ export default function App() {
 
     setLoading(true);
     setScreenshotUrl(null);
-    addLog(`Initiating capture: ${url}`);
+    setDirectApiUrl(null);
+    addLog(`Initiating task: ${url}`);
 
     try {
       const targetUrl = url.startsWith("http") ? url : `https://${url}`;
-      const response = await fetch(`/api/ssweb?url=${encodeURIComponent(targetUrl)}&fullPage=${fullPage}&type=${format}`);
+      
+      let apiUrl = "";
+      if (feature === "ssweb") {
+        apiUrl = `/api/ssweb?url=${encodeURIComponent(targetUrl)}&full=${fullPage}&type=${format}`;
+      } else {
+        apiUrl = `/api/removebg?url=${encodeURIComponent(targetUrl)}`;
+      }
+
+      setDirectApiUrl(currentOrigin + apiUrl);
+
+      const response = await fetch(apiUrl);
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to capture.");
+        throw new Error(errorData.message || "Failed to process.");
       }
 
       const blob = await response.blob();
       const imgUrl = URL.createObjectURL(blob);
       setScreenshotUrl(imgUrl);
-      addLog("SUCCESS: Capture complete and ready for download.");
+      addLog("SUCCESS: Task complete and ready for download.");
     } catch (err: any) {
       addLog(`CRITICAL FAILURE: ${err.message}`);
     } finally {
@@ -59,20 +74,27 @@ export default function App() {
     }
   };
 
+  // Generate Reference URL for display
+  let referenceUrl = "";
+  if (feature === "ssweb") {
+    referenceUrl = `${currentOrigin}/api/ssweb?url=${url || "example.com"}&full=${fullPage}&type=${format}`;
+  } else {
+    referenceUrl = `${currentOrigin}/api/removebg?url=${url || "example.jpg"}`;
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#EDEDED] font-sans flex flex-col selection:bg-blue-500/30 selection:text-white">
       {/* Header */}
       <header className="h-16 flex items-center justify-between px-6 lg:px-10 border-b border-white/5 bg-[#0D0D0D]">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Camera className="w-5 h-5 text-white" />
+            <Scan className="w-5 h-5 text-white" />
           </div>
-          <span className="text-lg font-bold tracking-tight text-white">SSWeb <span className="text-blue-500 underline underline-offset-4 decoration-2">API</span></span>
+          <span className="text-lg font-bold tracking-tight text-white">Utility <span className="text-blue-500 underline underline-offset-4 decoration-2">API</span></span>
         </div>
         <nav className="flex gap-8 text-sm font-medium text-gray-400">
           <a href="#" className="hover:text-white transition-colors hidden md:block">Documentation</a>
           <a href="#" className="hover:text-white transition-colors hidden md:block">Endpoints</a>
-          <a href="#" className="hover:text-white transition-colors hidden md:block">Pricing</a>
           <a href="#" className="text-white bg-white/10 hover:bg-white/15 px-4 py-1.5 rounded-full border border-white/10 transition-colors">Sign In</a>
         </nav>
       </header>
@@ -83,86 +105,104 @@ export default function App() {
         <section className="lg:col-span-6 xl:col-span-5 flex flex-col justify-center gap-8">
           <div className="space-y-4">
             <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.1]">
-              High-fidelity <br/><span className="text-blue-500">web captures</span> at scale.
+              High-fidelity <br/><span className="text-blue-500">API tasks</span> at scale.
             </h1>
             <p className="text-gray-400 text-base lg:text-lg max-w-lg">
-              Render static websites, SPAs, and complex web apps into high-quality images via a simple REST API.
+              Render static websites, apps, and obliterate backgrounds into high-quality images via a simple REST API.
             </p>
           </div>
 
           <div className="space-y-6">
+            
+            {/* Feature selector */}
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setFeature("ssweb")}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all border ${feature === 'ssweb' ? 'bg-blue-600/10 text-blue-500 border-blue-500/30' : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10'}`}
+              >
+                <Camera size={16} /> Screenshot Web
+              </button>
+              <button 
+                onClick={() => setFeature("removebg")}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all border ${feature === 'removebg' ? 'bg-blue-600/10 text-blue-500 border-blue-500/30' : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10'}`}
+              >
+                <Wand2 size={16} /> Remove BG
+              </button>
+            </div>
+
             <div className="relative group">
               <label className="absolute -top-2.5 left-4 bg-[#0A0A0A] px-2 text-[10px] uppercase tracking-widest text-blue-500 font-bold">
-                Website URL
+                {feature === "ssweb" ? "Website URL" : "Image URL"}
               </label>
               <input 
                 type="text" 
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white focus:outline-none focus:border-blue-500/50 transition-all font-mono text-sm"
+                placeholder={feature === "ssweb" ? "https://example.com" : "https://example.com/image.jpg"}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 pr-32 text-white focus:outline-none focus:border-blue-500/50 transition-all font-mono text-sm"
               />
               <button 
                 onClick={handleCapture}
                 disabled={loading}
-                className="absolute right-3 top-3 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="absolute right-3 top-3 bottom-3 bg-blue-600 hover:bg-blue-500 text-white px-6 rounded-lg font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-                    Capturing
                   </>
                 ) : (
-                  'Capture'
+                  'Process'
                 )}
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
-                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1.5"><MonitorSmartphone size={12}/> Viewport</span>
-                <select className="w-full bg-transparent text-sm text-gray-300 outline-none cursor-pointer">
-                  <option className="bg-[#1a1a1a]">1920x1080 (Desktop)</option>
-                  <option className="bg-[#1a1a1a]">390x844 (Mobile)</option>
-                </select>
-              </div>
-              
-              <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
-                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1.5"><Layers size={12}/> Format</span>
-                <div className="flex gap-4 text-sm mt-1">
-                  <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white transition-colors">
+            {feature === "ssweb" && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
+                  <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1.5"><MonitorSmartphone size={12}/> Viewport</span>
+                  <select className="w-full bg-transparent text-sm text-gray-300 outline-none cursor-pointer">
+                    <option className="bg-[#1a1a1a]">1920x1080 (Desktop)</option>
+                    <option className="bg-[#1a1a1a]">390x844 (Mobile)</option>
+                  </select>
+                </div>
+                
+                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
+                  <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1.5"><Layers size={12}/> Format</span>
+                  <div className="flex gap-4 text-sm mt-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white transition-colors">
+                      <input 
+                        type="radio" 
+                        name="format"
+                        checked={format === "png"}
+                        onChange={() => setFormat("png")}
+                        className="accent-blue-500" 
+                      /> PNG
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white transition-colors">
+                      <input 
+                        type="radio" 
+                        name="format"
+                        checked={format === "jpeg"}
+                        onChange={() => setFormat("jpeg")}
+                        className="accent-blue-500" 
+                      /> JPEG
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
+                  <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1.5"><Scan size={12}/> Options</span>
+                  <label className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors cursor-pointer mt-1">
                     <input 
-                      type="radio" 
-                      name="format"
-                      checked={format === "png"}
-                      onChange={() => setFormat("png")}
-                      className="accent-blue-500" 
-                    /> PNG
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white transition-colors">
-                    <input 
-                      type="radio" 
-                      name="format"
-                      checked={format === "jpeg"}
-                      onChange={() => setFormat("jpeg")}
-                      className="accent-blue-500" 
-                    /> JPEG
+                      type="checkbox" 
+                      checked={fullPage}
+                      onChange={(e) => setFullPage(e.target.checked)}
+                      className="accent-blue-500 rounded border-white/20" 
+                    /> Full Page
                   </label>
                 </div>
               </div>
-
-              <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
-                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1.5"><Scan size={12}/> Options</span>
-                <label className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors cursor-pointer mt-1">
-                  <input 
-                    type="checkbox" 
-                    checked={fullPage}
-                    onChange={(e) => setFullPage(e.target.checked)}
-                    className="accent-blue-500 rounded border-white/20" 
-                  /> Full Page
-                </label>
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="mt-2 space-y-4">
@@ -176,8 +216,8 @@ export default function App() {
                   <span className="text-[10px] uppercase font-bold tracking-widest text-[#2563eb]">Log Console →</span>
                 </div>
               </div>
-              <div className="bg-[#0A0A0A] border border-white/5 p-4 rounded-lg font-mono text-[13px] text-blue-300 overflow-x-auto whitespace-nowrap">
-                <span className="text-gray-500">GET</span> {window.location.origin}/api/ssweb?url=<span className="text-white italic">{url || "example.com"}</span>&full={fullPage.toString()}&type={format}
+              <div className="bg-[#0A0A0A] border border-white/5 p-4 rounded-lg font-mono text-[11px] md:text-[13px] text-blue-300 overflow-x-auto whitespace-nowrap">
+                <span className="text-gray-500">GET</span> {referenceUrl}
               </div>
             </div>
             
@@ -207,14 +247,15 @@ export default function App() {
                   {url ? url.replace(/^https?:\/\//, '') : "localhost:3000"}
                 </div>
               </div>
-              {screenshotUrl && (
+              {directApiUrl && (
                 <a 
-                  href={screenshotUrl} 
-                  download={`capture_${Date.now()}.${format}`}
+                  href={directApiUrl} 
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center justify-center gap-1.5 text-xs text-white/50 hover:text-blue-500 transition-colors bg-white/5 px-2.5 py-1 rounded-md border border-white/5"
                 >
                   <ExternalLink size={12} />
-                  Download target
+                  Open Direct API Link
                 </a>
               )}
             </div>
@@ -231,7 +272,7 @@ export default function App() {
                   >
                     <img 
                       src={screenshotUrl} 
-                      alt="Captured web page" 
+                      alt="Processed Output" 
                       className="max-w-full shadow-2xl border border-white/10 rounded"
                     />
                   </motion.div>
@@ -254,10 +295,10 @@ export default function App() {
                     )}
                     <div>
                       <p className="text-sm font-medium text-gray-400">
-                        {loading ? "Processing render..." : "Preview will appear here"}
+                        {loading ? "Processing..." : "Preview will appear here"}
                       </p>
                       <p className="text-[10px] text-gray-600 uppercase tracking-widest mt-1.5 font-bold">
-                        {loading ? "Extracting DOM layers" : "Awaiting first request"}
+                        {loading ? "Extracting Data" : "Awaiting first request"}
                       </p>
                     </div>
                   </motion.div>
@@ -284,7 +325,7 @@ export default function App() {
         </div>
         <div className="flex gap-6">
           <span className="hidden sm:inline">99.9% Uptime</span>
-          <span>v2.4.0</span>
+          <span>v2.5.0</span>
         </div>
       </footer>
     </div>
