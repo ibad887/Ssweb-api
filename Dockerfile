@@ -12,24 +12,23 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Add user for Hugging Face Spaces compatibility
-RUN useradd -m -u 1000 user
-
+# The node image already has a user with UID 1000 named 'node'
 WORKDIR /app
 
-# Change ownership of /app to user
-RUN chown user:user /app
+# Change ownership of /app to node user
+RUN chown node:node /app
 
-# Switch to user
-USER user
+# Switch to node user
+USER node
 
 # Copy package files
-COPY --chown=user:user package*.json ./
+COPY --chown=node:node package*.json ./
 
 # Install dependencies (including devDependencies for tsx and build)
 RUN npm install
 
 # Copy application files
-COPY --chown=user:user . .
+COPY --chown=node:node . .
 
 # Build Vite app
 RUN npm run build
