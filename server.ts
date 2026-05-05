@@ -32,7 +32,8 @@ async function startServer() {
     let browser;
     try {
       browser = await (puppeteer as any).launch({
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
         headless: true,
       });
 
