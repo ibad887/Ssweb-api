@@ -6,6 +6,13 @@ import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import multer from "multer";
 import { removeBackground } from "@imgly/background-removal-node";
+import { exec } from "child_process";
+import { promises as fsPromises } from "fs";
+import os from "os";
+import crypto from "crypto";
+import util from "util";
+
+const execAsync = util.promisify(exec);
 
 // @ts-ignore
 puppeteer.use(StealthPlugin());
@@ -169,6 +176,88 @@ async function startServer() {
     } catch (error: any) {
       console.error(`[NOXA_TERMINAL] FAILURE: Background removal failed for ${url}. Error: ${error.message}`);
       res.status(500).json({ status: false, message: "Failed to remove background.", error: error.message });
+    }
+  });
+
+  // API Route for Upscaler utilizing local Real-ESRGAN
+  app.post("/api/upscale", upload.single("image"), async (req, res) => {
+    const file = req.file;
+    const { url } = req.body;
+
+    if (!file && !url) {
+      return res.status(400).json({ status: false, message: "Provide an image file or a URL!" });
+    }
+
+    console.log(`[NOXA_TERMINAL] EXECUTION: Upscaling image via local Real-ESRGAN...`);
+
+    const tempDir = os.tmpdir();
+    const sessionId = crypto.randomUUID();
+    const inputPath = path.join(tempDir, `input_${sessionId}.img`);
+    const outputPath = path.join(tempDir, `output_${sessionId}.png`);
+    
+    try {
+      let bufferToWrite: Buffer;
+
+      if (file) {
+        bufferToWrite = file.buffer;
+      } else if (url) {
+        const response = await fetch(url as string);
+        if (!response.ok) {
+          return res.status(400).json({ status: false, message: "Failed to fetch image from the provided URL." });
+        }
+        const contentType = response.headers.get("content-type");
+        if (contentType && !contentType.startsWith("image/")) {
+          return res.status(400).json({ status: false, message: "URL provided is not an image." });
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        bufferToWrite = Buffer.from(arrayBuffer);
+      } else {
+         return res.status(400).json({ status: false, message: "Provide an image file or a URL!" });
+      }
+
+      try {
+        const sharp = (await import("sharp")).default;
+        const metadata = await sharp(bufferToWrite).metadata();
+        if (metadata.width && metadata.height && (metadata.width > 960 || metadata.height > 960)) {
+           console.log(`[NOXA_TERMINAL] Input size ${metadata.width}x${metadata.height}. Resizing to max 960x960 to cap output at 4k...`);
+           bufferToWrite = await sharp(bufferToWrite).resize(960, 960, { fit: 'inside', withoutEnlargement: true }).toBuffer();
+        }
+      } catch (sharpErr) {
+        console.error("[NOXA_TERMINAL] Sharp resize fail:", sharpErr);
+      }
+
+      await fsPromises.writeFile(inputPath, bufferToWrite);
+
+      // Use the local downloaded realesrgan binary in the working directory
+      const executable = process.env.REALESRGAN_PATH || path.join(process.cwd(), "realesrgan", "realesrgan-ncnn-vulkan");
+      const modelsPath = path.join(process.cwd(), "realesrgan", "models");
+      
+      console.log(`[NOXA_TERMINAL] SYSTEM: Invoking ${executable}`);
+      
+      try {
+        await execAsync(`"${executable}" -i "${inputPath}" -o "${outputPath}" -m "${modelsPath}"`);
+      } catch (execErr: any) {
+        console.error(`[NOXA_TERMINAL] REAL-ESRGAN ERROR: ${execErr.message}`);
+        // If local binary is missing or fails, let the user know clearly
+        return res.status(500).json({ 
+          status: false, 
+          message: "Failed to run Real-ESRGAN locally. Make sure 'realesrgan-ncnn-vulkan' is installed and in your system PATH, or set REALESRGAN_PATH environment variable.", 
+          error: execErr.message 
+        });
+      }
+
+      const outputBuffer = await fsPromises.readFile(outputPath);
+      res.set("Content-Type", "image/png");
+      res.send(outputBuffer);
+
+      console.log(`[NOXA_TERMINAL] SUCCESS: Image upscaled successfully.`);
+    } catch (error: any) {
+      console.error(`[NOXA_TERMINAL] FAILURE: Upscaling failed. Error: ${error.message}`);
+      res.status(500).json({ status: false, message: "Failed to upscale image.", error: error.message });
+    } finally {
+      // Clean up temporary files
+      await fsPromises.unlink(inputPath).catch(() => {});
+      await fsPromises.unlink(outputPath).catch(() => {});
     }
   });
 

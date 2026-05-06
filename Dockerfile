@@ -4,6 +4,7 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf \
+    libvulkan1 mesa-vulkan-drivers wget unzip \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
@@ -23,6 +24,7 @@ USER node
 
 # Copy package files
 COPY --chown=node:node package*.json ./
+COPY --chown=node:node download_realesrgan.ts ./
 
 # Install dependencies (including devDependencies for tsx and build)
 RUN npm install
