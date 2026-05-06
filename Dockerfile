@@ -33,7 +33,8 @@ COPY --chown=node:node . .
 # Build Vite app
 RUN npm run build
 
-# Expose port (Hugging Face Spaces connects to the first EXPOSE port)
+# Expose port 7860 for Hugging Face
+EXPOSE 7860
 EXPOSE 3000
 
 # Start the server using tsx

@@ -14,7 +14,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // AI Studio uses 3000, Hugging Face uses 7860
+  const PORT = process.env.SPACE_ID ? 7860 : 3000;
 
   app.use(cors());
   app.use(express.json());
