@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+realesrgan/
+realesrgan.zip
+test.png
