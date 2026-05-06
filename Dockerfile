@@ -29,6 +29,9 @@ COPY --chown=node:node download_realesrgan.ts ./
 # Install dependencies (including devDependencies for tsx and build)
 RUN npm install
 
+# Download Real-ESRGAN during build
+RUN npx tsx download_realesrgan.ts
+
 # Copy application files
 COPY --chown=node:node . .
 

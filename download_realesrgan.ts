@@ -12,6 +12,7 @@ try {
   execSync(`wget -q ${url} -O realesrgan.zip`);
   execSync("unzip -o realesrgan.zip -d realesrgan");
   execSync("chmod +x realesrgan/realesrgan-ncnn-vulkan");
+  execSync("rm realesrgan.zip");
 
   const result = execSync("./realesrgan/realesrgan-ncnn-vulkan -h", { encoding: "utf-8" });
   console.log("Success! Realesrgan works locally.");
