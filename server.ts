@@ -41,6 +41,27 @@ async function startServer() {
 
     console.log(`[NOXA_TERMINAL] EXECUTION: Snatching screenshot from ${url}...`);
 
+    // Before deploying full headless browser, check if the URL is just an image
+    // This fixes the "Failed to penetrate target URL" on Google Image links and direct images
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const headRes = await fetch(url as string, { method: "HEAD", signal: controller.signal });
+      clearTimeout(timeout);
+      const cType = headRes.headers.get("content-type");
+      if (cType && cType.startsWith("image/")) {
+         const imgRes = await fetch(url as string);
+         if (imgRes.ok) {
+             const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+             res.set("Content-Type", cType);
+             console.log(`[NOXA_TERMINAL] SUCCESS: Target was a direct image. Returned raw bytes.`);
+             return res.send(imgBuffer);
+         }
+      }
+    } catch (headError) {
+      // Ignore errors and proceed to the browser method if this fails
+    }
+
     let browser;
     try {
       // Disguise Chrome binary inside the puppeteer local cache
@@ -316,6 +337,78 @@ async function startServer() {
       // Clean up temporary files
       await fsPromises.unlink(inputPath).catch(() => {});
       await fsPromises.unlink(outputPath).catch(() => {});
+    }
+  });
+
+  // API Route for Film/Movie Search
+  app.get("/api/filmsearch", async (req, res) => {
+    const { query } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ status: false, message: "Query parameter 'query' is required." });
+    }
+
+    console.log(`[NOXA_TERMINAL] EXECUTION: Searching data core for film '${query}'...`);
+
+    try {
+      // First attempt: Primary Data Source (YTS API - High Quality Data)
+      try {
+        const ytsUrl = `https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query as string)}`;
+        const ytsRes = await fetch(ytsUrl);
+        if (ytsRes.ok) {
+          const ytsData = await ytsRes.json();
+          if (ytsData.status === "ok" && ytsData.data && ytsData.data.movies && ytsData.data.movies.length > 0) {
+             console.log(`[NOXA_TERMINAL] SUCCESS: Discovered ${ytsData.data.movies.length} films via Primary Axis.`);
+             return res.json({
+               status: true,
+               source: "YTS",
+               results: ytsData.data.movies.map((m: any) => ({
+                 title: m.title,
+                 year: m.year,
+                 rating: m.rating,
+                 runtime: m.runtime,
+                 genres: m.genres,
+                 summary: m.summary,
+                 cover: m.large_cover_image,
+                 trailer: m.yt_trailer_code ? `https://www.youtube.com/watch?v=${m.yt_trailer_code}` : null,
+                 url: m.url
+               }))
+             });
+          }
+        }
+      } catch (ytsErr) {
+         console.warn("[NOXA_TERMINAL] Warning: Primary film axis down, rolling back to Secondary Axis.");
+      }
+
+      // Fallback: Secondary Data Source (IMDB Open Directory)
+      const q = (query as string).toLowerCase();
+      const imdbUrl = `https://v2.sg.media-imdb.com/suggestion/${q.charAt(0)}/${encodeURIComponent(q)}.json`;
+      const imdbRes = await fetch(imdbUrl);
+      if (imdbRes.ok) {
+         const imdbData = await imdbRes.json();
+         if (imdbData.d && imdbData.d.length > 0) {
+            console.log(`[NOXA_TERMINAL] SUCCESS: Discovered ${imdbData.d.length} matches via Secondary Axis.`);
+            return res.json({
+              status: true,
+              source: "IMDB",
+              results: imdbData.d.filter((item: any) => item.qid === "movie" || item.qid === "tvSeries").map((item: any) => ({
+                 title: item.l,
+                 year: item.y,
+                 type: item.qid,
+                 cast_crew: item.s,
+                 cover: item.i ? item.i.imageUrl : null,
+                 url: `https://www.imdb.com/title/${item.id}/`
+              }))
+            });
+         }
+      }
+
+      console.log(`[NOXA_TERMINAL] FAILURE: Zero matches found in database for '${query}'.`);
+      res.status(404).json({ status: false, message: "No films found matching your search." });
+
+    } catch (error: any) {
+      console.error(`[NOXA_TERMINAL] FAILURE: Data core extraction error. ${error.message}`);
+      res.status(500).json({ status: false, message: "Failed to search film.", error: error.message });
     }
   });
 
