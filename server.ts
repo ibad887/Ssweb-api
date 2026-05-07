@@ -25,8 +25,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 async function startServer() {
   const app = express();
-  // AI Studio uses 3000, Hugging Face uses 7860
-  const PORT = process.env.SPACE_ID ? 7860 : 3000;
+  // AI Studio uses 3000, Hugging Face uses 7860, Pterodactyl uses process.env.SERVER_PORT or PORT
+  const PORT = process.env.SERVER_PORT || process.env.PORT || (process.env.SPACE_ID ? 7860 : 3000);
 
   app.use(cors());
   app.use(express.json());
@@ -44,15 +44,27 @@ async function startServer() {
     let browser;
     try {
       // Disguise Chrome binary inside the puppeteer local cache
-      const actualChrome = (puppeteer as any).executablePath();
-      const fakeChrome = path.join(path.dirname(actualChrome), "python-tensor-worker");
-      if (!fs.existsSync(fakeChrome)) {
-         fs.copyFileSync(actualChrome, fakeChrome);
-         fs.chmodSync(fakeChrome, "755");
+      let actualChrome = "";
+      let executableToUse = process.env.PUPPETEER_EXECUTABLE_PATH;
+      
+      try {
+        actualChrome = (puppeteer as any).executablePath();
+        const fakeChrome = path.join(path.dirname(actualChrome), "python-tensor-worker");
+        
+        if (!executableToUse) {
+          if (!fs.existsSync(fakeChrome)) {
+             fs.copyFileSync(actualChrome, fakeChrome);
+             fs.chmodSync(fakeChrome, "755");
+          }
+          executableToUse = fakeChrome;
+        }
+      } catch (e) {
+        console.warn("[NOXA_TERMINAL] Warning: Could not create stealth binary wrapper, falling back to original executable.", e);
+        if (!executableToUse) executableToUse = actualChrome;
       }
 
       browser = await (puppeteer as any).launch({
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || fakeChrome,
+        executablePath: executableToUse,
         args: [
           "--no-sandbox", 
           "--disable-setuid-sandbox", 
@@ -117,7 +129,34 @@ async function startServer() {
     } catch (error: any) {
       if (browser) await browser.close();
       console.error(`[NOXA_TERMINAL] FAILURE: System failed to snatch ${url}. Error: ${error.message}`);
-      res.status(500).json({ status: false, message: "Failed to penetrate the target URL.", error: error.message });
+      
+      // Hint for Pterodactyl users if Puppeteer fails to launch
+      if (error.message.includes("error while loading shared libraries") || error.message.includes("Failed to launch the browser process")) {
+         console.error(`[NOXA_TERMINAL] ⚠️ PTERODACTYL / SERVER PANEL TIP: If you see "error while loading shared libraries", your Node.js container is missing Chrome dependencies! Please use a Puppeteer-enabled Node.js Egg or install Chrome manually.`);
+      }
+
+      console.log(`[NOXA_TERMINAL] ⚠️ Using public fallback API due to Puppeteer failure...`);
+      try {
+        const isFullPage = fullPage === "true" || full === "true";
+        // Thum.io is a free public fallback that works decently for screenshots when puppeteer lacks dependencies
+        const fallbackUrl = `https://image.thum.io/get/width/1280/crop/${isFullPage ? 3000 : 900}/noanimate/${encodeURIComponent(url as string)}`;
+        const fallbackRes = await fetch(fallbackUrl);
+        if (!fallbackRes.ok) {
+           throw new Error("Fallback API returned " + fallbackRes.status);
+        }
+        const fallbackBuffer = Buffer.from(await fallbackRes.arrayBuffer());
+        res.set("Content-Type", "image/png");
+        res.send(fallbackBuffer);
+        console.log(`[NOXA_TERMINAL] SUCCESS: Data extracted from ${url} using fallback API.`);
+      } catch (fallbackError: any) {
+        console.error(`[NOXA_TERMINAL] FALLBACK FAILURE: ${fallbackError.message}`);
+        res.status(500).json({ 
+          status: false, 
+          message: "Failed to penetrate the target URL locally and via fallback.", 
+          error: error.message, 
+          fallbackError: fallbackError.message 
+        });
+      }
     }
   });
 
